@@ -1,0 +1,62 @@
+﻿# ============================================================
+# Multi-Agent RL Navigation - Project-Specific .gitignore
+# ============================================================
+
+# ========== TRAINED MODELS & WEIGHTS ==========
+models/mappo_curriculum/*.pt
+models/curriculum/*.zip
+models/*.pt
+models/*.pth
+models/*.zip
+models/*.pkl
+
+# ========== ENVIRONMENT-SPECIFIC ==========
+cuda_env/
+ml_env/
+hrm_env/
+
+# ========== PYTHON RUNTIME ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ========== TRAINING ARTIFACTS ==========
+logs/
+runs/
+wandb/
+*.log
+
+# ========== EVALUATION OUTPUTS ==========
+evaluation_results/
+screenshots/
+recordings/
+*.mp4
+*.gif
+
+# ========== IDE & EDITORS ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== OS FILES ==========
+.DS_Store
+Thumbs.db
+
+# ========== JUPYTER ==========
+.ipynb_checkpoints/
+*.ipynb
+
+# ========== PYGAME ARTIFACTS ==========
+pygame_screenshot_*.png
+
+# ========== TEMPORARY FILES ==========
+*.tmp
+temp/
+tmp/
+
+# ========== PACKAGE ARTIFACTS ==========
+*.egg-info/
+dist/
+build/

@@ -1,0 +1,19 @@
+# Multi-Agent Grid Navigation with MAPPO (Centralized Critic)
+# ================================================================
+
+# Deep Learning (CUDA 12.1 for RTX 3050)
+# Install separately with:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Multi-Agent RL
+pettingzoo>=1.24.0
+gymnasium>=0.29.0
+
+# Visualization
+pygame>=2.5.0
+
+# Scientific Computing
+numpy>=1.24.0
