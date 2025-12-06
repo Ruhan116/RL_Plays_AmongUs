@@ -18,50 +18,71 @@ from environment.simple_grid import SimpleGrid
 
 class EarlyStoppingCallback(BaseCallback):
     """
-    Custom callback for early stopping based on mean reward.
-    Stops training if no improvement for patience evaluations.
+    Custom callback for early stopping based on success rate.
+    Tracks episode outcomes and stops when consistent high performance achieved.
     """
-    def __init__(self, check_freq=4096, patience=5, min_episodes=10, verbose=1):
+    def __init__(self, check_freq=4096, patience=5, min_episodes=10, target_success=0.95, verbose=1):
         super().__init__(verbose)
         self.check_freq = check_freq
         self.patience = patience
         self.min_episodes = min_episodes
-        self.best_mean_reward = -float('inf')
+        self.target_success = target_success
+        self.best_success_rate = 0.0
         self.no_improvement_count = 0
-        self.episode_rewards = []
+        self.episode_successes = []
         self.episode_count = 0
         
     def _on_step(self):
         # Check if it's time to evaluate
         if self.n_calls % self.check_freq == 0:
-            # Get recent episode rewards from training
+            # Get recent episode info from training
             if len(self.model.ep_info_buffer) > 0:
-                mean_reward = sum([ep_info['r'] for ep_info in self.model.ep_info_buffer]) / len(self.model.ep_info_buffer)
+                # Calculate success rate from episode rewards
+                # Success = both agents reached goals (reward = 1 per agent per episode)
+                recent_episodes = list(self.model.ep_info_buffer)[-20:]  # Last 20 episodes
+                success_count = sum(1 for ep in recent_episodes if ep.get('r', 0) >= 1.8)  # ~2.0 reward means both succeeded
+                success_rate = success_count / len(recent_episodes) if recent_episodes else 0
+                
+                mean_reward = sum([ep_info['r'] for ep_info in recent_episodes]) / len(recent_episodes)
                 
                 if self.verbose > 0:
-                    print(f"\nEval at {self.num_timesteps} steps: mean_reward={mean_reward:.2f}")
+                    print(f"\n{'='*60}")
+                    print(f"Eval @ {self.num_timesteps:,} steps:")
+                    print(f"  Mean Reward: {mean_reward:.3f}")
+                    print(f"  Success Rate: {success_rate:.1%} (target: {self.target_success:.0%})")
+                    print(f"  Episodes evaluated: {len(recent_episodes)}")
+                    print(f"{'='*60}")
                 
-                # Check if this is the best reward
-                if mean_reward > self.best_mean_reward:
-                    self.best_mean_reward = mean_reward
+                # Check if this is the best success rate
+                if success_rate > self.best_success_rate:
+                    self.best_success_rate = success_rate
                     self.no_improvement_count = 0
                     if self.verbose > 0:
-                        print(f"New best mean reward: {self.best_mean_reward:.2f}")
+                        print(f"✓ New best success rate: {self.best_success_rate:.1%}")
                 else:
                     self.no_improvement_count += 1
                     if self.verbose > 0:
-                        print(f"No improvement for {self.no_improvement_count}/{self.patience} checks")
+                        print(f"No improvement ({self.no_improvement_count}/{self.patience} checks)")
                 
-                # Stop if no improvement for patience checks and min episodes done
-                if self.no_improvement_count >= self.patience and self.num_timesteps >= self.min_episodes * 1000:
+                # Stop if target achieved consistently
+                if success_rate >= self.target_success and self.num_timesteps >= self.min_episodes * 1000:
+                    if self.verbose > 0:
+                        print(f"\n{'🎯'*20}")
+                        print(f"TARGET ACHIEVED! Success rate: {success_rate:.1%}")
+                        print(f"{'🎯'*20}")
+                    return False
+                
+                # Stop if no improvement for patience checks
+                if self.no_improvement_count >= self.patience and self.num_timesteps >= self.min_episodes * 2000:
                     if self.verbose > 0:
                         print(f"\nEarly stopping: No improvement for {self.patience} evaluations")
+                        print(f"Best success rate achieved: {self.best_success_rate:.1%}")
                     return False
         
         return True
 
 
-def train_curriculum(start_size=5, end_size=20, base_timesteps=50000):
+def train_curriculum(start_size=5, end_size=20, base_timesteps=100000):
     """
     Train agents using curriculum learning across increasing grid sizes.
     Training time scales with grid complexity.
@@ -132,7 +153,7 @@ def train_curriculum(start_size=5, end_size=20, base_timesteps=50000):
         
         # Create or update PPO model
         if model is None:
-            print("[3/4] Initializing new PPO model...")
+            print("[3/4] Initializing new PPO model with GPU acceleration...")
             model = PPO(
                 "MlpPolicy", 
                 parallel_env, 
@@ -140,11 +161,12 @@ def train_curriculum(start_size=5, end_size=20, base_timesteps=50000):
                 learning_rate=3e-4,
                 n_steps=2048,
                 batch_size=64,
-                n_epochs=30,  # 3x more epochs (10 -> 30)
+                n_epochs=30,
                 gamma=0.99,
                 gae_lambda=0.95,
                 clip_range=0.2,
-                ent_coef=0.01
+                ent_coef=0.01,  # Original value that worked
+                device="cuda"
             )
         else:
             print(f"[3/4] Creating new model for {grid_size}x{grid_size} (warm start from previous knowledge)...")
@@ -158,22 +180,24 @@ def train_curriculum(start_size=5, end_size=20, base_timesteps=50000):
                 learning_rate=old_learning_rate,
                 n_steps=2048,
                 batch_size=64,
-                n_epochs=30,  # 3x more epochs (10 -> 30)
+                n_epochs=30,
                 gamma=0.99,
                 gae_lambda=0.95,
                 clip_range=0.2,
-                ent_coef=0.01
+                ent_coef=0.01,  # Original value that worked
+                device="cuda"
             )
         
         # Train the model with early stopping
         print(f"[4/4] Training on {grid_size}x{grid_size} grid (with early stopping)...")
         print("-" * 70)
         
-        # Setup early stopping callback
+        # Setup early stopping callback with success rate tracking
         early_stop = EarlyStoppingCallback(
             check_freq=4096,
-            patience=5,
-            min_episodes=10,
+            patience=10,  # Increased patience
+            min_episodes=20,
+            target_success=0.98,  # 98% success rate (increased from 95%)
             verbose=1
         )
         

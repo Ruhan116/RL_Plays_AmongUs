@@ -37,6 +37,10 @@ class SimpleGrid(ParallelEnv):
         self.pos = {}
         self.goals = {}
         self._np_random = None
+        
+        # Episode step tracking
+        self.current_step = 0
+        self.max_steps = self.grid_size * 10  # 10x grid size
 
         # Define action and observation spaces
         # Observation: [agent_x, agent_y, goal_x, goal_y, other_agent_x, other_agent_y]
@@ -86,6 +90,14 @@ class SimpleGrid(ParallelEnv):
         self.terminations = {a: False for a in self.agents}
         self.truncations = {a: False for a in self.agents}
         self.infos = {a: {} for a in self.agents}
+        
+        # Reset step counter and update max steps based on current grid size
+        self.current_step = 0
+        self.max_steps = self.grid_size * 10
+        self.current_step = 0
+        
+        # Update max steps based on grid size
+        self.max_steps = self.grid_size * 10
 
         # Return observations for all agents
         observations = {agent: self.observe(agent) for agent in self.agents}
@@ -119,6 +131,7 @@ class SimpleGrid(ParallelEnv):
         Returns:
             observations, rewards, terminations, truncations, infos
         """
+        self.current_step += 1
         # Execute actions for all agents
         for agent, action in actions.items():
             if agent not in self.agents:
@@ -142,20 +155,30 @@ class SimpleGrid(ParallelEnv):
         # Calculate rewards and check terminations
         rewards = {}
         for agent in self.agents:
-            # Only give reward if agent hasn't already terminated
-            if not self.terminations[agent]:
-                if self.pos[agent] == self.goals[agent]:
+            # Reward structure:
+            # - First time reaching goal: 1.0 (full reward)
+            # - Staying at goal after reaching it: 0.5 (half reward to encourage staying)
+            # - Not at goal: 0.0
+            if self.pos[agent] == self.goals[agent]:
+                if not self.terminations[agent]:
+                    # First time reaching goal
                     rewards[agent] = 1.0
                     self.terminations[agent] = True
                 else:
-                    rewards[agent] = 0.0
+                    # Already reached goal, give continuous reward for staying
+                    rewards[agent] = 0.5
             else:
-                # Agent already reached goal, no more rewards
                 rewards[agent] = 0.0
 
-        # Episode ends when all agents reach their goals
+        # Episode ends when all agents reach their goals OR timeout
         if all(self.terminations.values()):
             self.truncations = {a: True for a in self.agents}
+        
+        # Truncate episode if it takes too long (prevents infinite wandering)
+        if self.current_step >= self.max_steps:
+            self.truncations = {a: True for a in self.agents}
+
+        # Get observations for all agents
 
         # Get observations for all agents
         observations = {agent: self.observe(agent) for agent in self.agents}
